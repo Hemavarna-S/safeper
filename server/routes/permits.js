@@ -1,8 +1,10 @@
 import express from "express";
 import Permit from "../models/Permit.js";
 import Checklist from "../models/Checklist.js";
+import QRCode from "qrcode";
+import { auditLogger } from "../middleware/auditLogger.js";
 const router = express.Router();
-router.post("/", async (req, res) => {
+router.post("/", auditLogger("CREATE_PERMIT"), async (req, res) => {
   try {
     const { type, location, worker } = req.body;
     const template = await Checklist.findOne({ workType: type });
@@ -11,12 +13,14 @@ router.post("/", async (req, res) => {
       completed: false
     }));
     const qrToken = Math.random().toString(36).substring(2);
+    const qrImage = await QRCode.toDataURL(qrToken);
     const permit = new Permit({
       type,
       location,
       worker,
       checklist,
-      qrToken
+      qrToken,
+      qrImage
     });
     await permit.save();
     res.json(permit);
@@ -28,5 +32,17 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   const permits = await Permit.find().populate("worker");
   res.json(permits);
+});
+router.get("/:id", async (req, res) => {
+  const permit = await Permit.findById(req.params.id).populate("worker");
+  res.json(permit);
+});
+router.patch("/:id/status", auditLogger("UPDATE_PERMIT"), async (req, res) => {
+  const permit = await Permit.findByIdAndUpdate(
+    req.params.id,
+    { status: req.body.status },
+    { new: true }
+  );
+  res.json(permit);
 });
 export default router;
