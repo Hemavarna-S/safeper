@@ -2,19 +2,27 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import API from "../api/api";
 import PermitCard from "../components/PermitCard";
+import {
+  buildOperationalInsights,
+  buildRecommendations,
+  getPermitId,
+  getPermitRisk
+} from "../utils/permitInsights";
 
 function Dashboard() {
   const [permits, setPermits] = useState([]);
+  const [workers, setWorkers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
 
-    API.get("/permits")
-      .then((res) => {
+    Promise.all([API.get("/permits"), API.get("/workers")])
+      .then(([permitRes, workerRes]) => {
         if (isMounted) {
-          setPermits(res.data);
+          setPermits(permitRes.data);
+          setWorkers(workerRes.data);
           setError("");
         }
       })
@@ -50,6 +58,19 @@ function Dashboard() {
   }, [permits]);
 
   const recentPermits = permits.slice(0, 3);
+  const operationalInsights = useMemo(
+    () => buildOperationalInsights(permits, workers),
+    [permits, workers]
+  );
+  const recommendations = useMemo(
+    () => buildRecommendations(permits, workers),
+    [permits, workers]
+  );
+  const topRiskPermit = useMemo(() => {
+    return [...permits]
+      .map((permit) => ({ permit, risk: getPermitRisk(permit) }))
+      .sort((a, b) => b.risk.score - a.risk.score)[0];
+  }, [permits]);
   const activePercent =
     permits.length > 0 ? Math.round((stats[1].value / permits.length) * 100) : 0;
   const readyPercent =
@@ -89,6 +110,9 @@ function Dashboard() {
             <Link className="secondary-action" to="/permits">
               View register
             </Link>
+            <Link className="secondary-action" to="/scanner">
+              Launch scanner
+            </Link>
           </div>
         </div>
 
@@ -124,6 +148,16 @@ function Dashboard() {
 
       {error && <div className="alert">{error}</div>}
 
+      <section className="insight-strip" aria-label="Operations intelligence">
+        {operationalInsights.map((item) => (
+          <article className={`insight-card insight-card--${item.tone}`} key={item.label}>
+            <span>{item.label}</span>
+            <strong>{isLoading ? "-" : item.value}</strong>
+            <p>{item.body}</p>
+          </article>
+        ))}
+      </section>
+
       <section className="story-rail" aria-label="Permit workflow">
         {storySteps.map((step, index) => (
           <article className="story-step" key={step.label}>
@@ -142,6 +176,53 @@ function Dashboard() {
           </article>
         ))}
       </div>
+
+      <section className="intelligence-grid" aria-label="Smart operations brief">
+        <article className="ai-brief">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Command intelligence</p>
+              <h2>Recommended next moves</h2>
+            </div>
+            <Link className="text-link" to="/permits">
+              Act now
+            </Link>
+          </div>
+
+          <div className="recommendation-list">
+            {recommendations.length > 0 ? (
+              recommendations.map((item) => (
+                <div className="recommendation-card" key={item.title}>
+                  <span>{item.action}</span>
+                  <strong>{item.title}</strong>
+                  <p>{item.body}</p>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state empty-state--small">
+                No recommendations right now. The operation is clear.
+              </div>
+            )}
+          </div>
+        </article>
+
+        <article className="risk-orbit">
+          <p className="eyebrow">Risk radar</p>
+          <div className="risk-dial" style={{ "--risk": `${topRiskPermit?.risk.score || 0}%` }}>
+            <span>{isLoading ? "-" : topRiskPermit?.risk.score || 0}</span>
+          </div>
+          <h2>
+            {topRiskPermit
+              ? `${getPermitId(topRiskPermit.permit)} needs attention`
+              : "No permit risk detected"}
+          </h2>
+          <p>
+            {topRiskPermit
+              ? topRiskPermit.risk.reasons.join(", ")
+              : "Risk scoring activates as soon as permits are created."}
+          </p>
+        </article>
+      </section>
 
       <div className="dashboard-layout">
         <section className="work-band">
