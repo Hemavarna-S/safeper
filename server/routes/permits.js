@@ -33,6 +33,19 @@ router.get("/", async (req, res) => {
   const permits = await Permit.find().populate("worker");
   res.json(permits);
 });
+router.get("/verify/:qrToken", async (req, res) => {
+  try {
+    const permit = await Permit.findOne({ qrToken: req.params.qrToken }).populate("worker");
+
+    if (!permit) {
+      return res.status(404).json({ message: "Permit QR code was not found." });
+    }
+
+    res.json(permit);
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
+});
 router.get("/:id", async (req, res) => {
   const permit = await Permit.findById(req.params.id).populate("worker");
   res.json(permit);
@@ -42,7 +55,7 @@ router.patch("/:id/status", auditLogger("UPDATE_PERMIT"), async (req, res) => {
     req.params.id,
     { status: req.body.status },
     { new: true }
-  );
+  ).populate("worker");
   res.json(permit);
 });
 export default router;
